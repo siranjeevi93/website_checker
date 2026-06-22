@@ -9,6 +9,7 @@
     "name": "Internal Wiki",
     "url": "https://wiki.internal.example.com",
     "category": "internal",
+    "verify_tls": false,
     "added": "2026-01-01T00:00:00+00:00"
   }
 ]

@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+import urllib3
 
 BASE_DIR = Path(__file__).resolve().parent
 SITES_FILE = Path(os.environ.get("WM_SITES", BASE_DIR / "sites.json"))
@@ -92,19 +93,22 @@ def _normalize_category(category: str | None) -> str:
     return cat
 
 
-def add_site(url: str, name: str | None = None, category: str | None = None) -> dict:
+def add_site(url: str, name: str | None = None, category: str | None = None,
+             verify_tls: bool = True) -> dict:
     url = _normalize_url(url)
     cat = _normalize_category(category)
     sites = load_sites()
     for s in sites:
         if s["url"] == url:
-            # idempotent on url; allow updating name/category in place
+            # idempotent on url; allow updating name/category/verify in place
             if name:
                 s["name"] = name
             s["category"] = cat
+            s["verify_tls"] = verify_tls
             save_sites(sites)
             return s
-    entry = {"name": name or url, "url": url, "category": cat, "added": now_iso()}
+    entry = {"name": name or url, "url": url, "category": cat,
+             "verify_tls": verify_tls, "added": now_iso()}
     sites.append(entry)
     save_sites(sites)
     return entry
@@ -126,13 +130,21 @@ def remove_site(url_or_name: str) -> bool:
 
 # ---- the check --------------------------------------------------------------
 
-def check_url(url: str, timeout: float = DEFAULT_TIMEOUT) -> dict:
-    """Perform one HTTP GET and return a structured result dict."""
+def check_url(url: str, timeout: float = DEFAULT_TIMEOUT,
+              verify_tls: bool = True) -> dict:
+    """Perform one HTTP GET and return a structured result dict.
+
+    Set verify_tls=False for internal hosts with self-signed/private-CA certs
+    (e.g. vCenter, appliances on .local) so a cert-trust failure does not show
+    as a false DOWN. The HTTP status check is unchanged."""
     started = now_iso()
     headers = {"User-Agent": USER_AGENT}
+    if not verify_tls:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     try:
         resp = requests.get(
-            url, timeout=timeout, headers=headers, allow_redirects=True
+            url, timeout=timeout, headers=headers, allow_redirects=True,
+            verify=verify_tls,
         )
         latency_ms = round(resp.elapsed.total_seconds() * 1000, 1)
         healthy = resp.status_code < 400
@@ -238,7 +250,8 @@ def uptime_summary(url: str | None = None) -> dict:
 def run_all(timeout: float = DEFAULT_TIMEOUT) -> list[dict]:
     results = []
     for site in load_sites():
-        res = check_url(site["url"], timeout=timeout)
+        res = check_url(site["url"], timeout=timeout,
+                        verify_tls=site.get("verify_tls", True))
         res["name"] = site.get("name", site["url"])
         res["category"] = site.get("category", "external")
         record_result(res)

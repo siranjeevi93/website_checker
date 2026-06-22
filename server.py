@@ -30,13 +30,16 @@ mcp = FastMCP("website-monitor")
 
 
 @mcp.tool()
-def add_site(url: str, name: str | None = None, category: str = "external") -> dict:
+def add_site(url: str, name: str | None = None, category: str = "external",
+             verify_tls: bool = True) -> dict:
     """Add a website to the monitor. `url` may omit the scheme (defaults to
     https). `name` is an optional friendly label. `category` is "internal" or
     "external" (default external) and controls grouping on the dashboard.
-    Idempotent on url (re-adding updates name/category). Takes effect on the
-    next hourly run; use check_now to test it immediately."""
-    entry = mc.add_site(url, name, category)
+    Set `verify_tls=False` for internal hosts with self-signed/private-CA certs
+    (e.g. vCenter, .local appliances) so a cert-trust failure isn't a false
+    DOWN. Idempotent on url (re-adding updates name/category/verify_tls). Takes
+    effect on the next hourly run; use check_now to test it immediately."""
+    entry = mc.add_site(url, name, category, verify_tls)
     return {"added": entry, "sites": mc.load_sites()}
 
 
@@ -60,7 +63,10 @@ def check_now(url: str | None = None) -> dict:
     configured sites. Results are recorded to status/history like a cron run."""
     if url is not None:
         url = mc._normalize_url(url)
-        res = mc.check_url(url)
+        # honor the configured site's verify_tls if this URL is one we monitor
+        verify = next((s.get("verify_tls", True) for s in mc.load_sites()
+                       if s["url"] == url), True)
+        res = mc.check_url(url, verify_tls=verify)
         mc.record_result(res)
         return {"results": [res]}
     return {"results": mc.run_all()}
