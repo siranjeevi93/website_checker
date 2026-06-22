@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Runtime state — generated at runtime, may contain environment-specific URLs
+sites.json
+status.json
+history.jsonl
+*.tmp
+
+# Logs
+*.log
+
+# Secrets / environment — never commit
+.env
+*.env
+credentials.env
+secrets.*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

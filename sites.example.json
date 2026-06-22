@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Public Marketing Site",
+    "url": "https://www.example.com",
+    "category": "external",
+    "added": "2026-01-01T00:00:00+00:00"
+  },
+  {
+    "name": "Internal Wiki",
+    "url": "https://wiki.internal.example.com",
+    "category": "internal",
+    "added": "2026-01-01T00:00:00+00:00"
+  }
+]
