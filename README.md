@@ -139,11 +139,13 @@ To run the server on a remote host over SSH, point `command` at `ssh` and pass t
 
 ## Email alerts (optional)
 
-When the hourly sweep finds one or more sites down, it can email a consolidated
-alert. Delivery is **direct to each recipient domain's MX** over SMTP port 25
-with opportunistic STARTTLS — so **no local mail server (Postfix/sendmail) and
-no SMTP relay are required**. It works wherever outbound `:25` to the
-recipient's MX is allowed and that MX accepts your host's mail.
+When the hourly sweep finds one or more sites down, it emails a consolidated
+**down-alert** (one email listing all currently-down sites, every hour while
+they stay down). When a site transitions back **down → up**, it emails a
+one-time **recovery** notice. Delivery is **direct to each recipient domain's
+MX** over SMTP port 25 with opportunistic STARTTLS — so **no local mail server
+(Postfix/sendmail) and no SMTP relay are required**. It works wherever outbound
+`:25` to the recipient's MX is allowed and that MX accepts your host's mail.
 
 Enable it by creating a git-ignored `alert.env` (copy from `alert.env.example`):
 

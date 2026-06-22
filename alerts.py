@@ -185,6 +185,35 @@ def send_down_alert(down: list[dict], total: int) -> dict:
     return _deliver(subject, "\n".join(lines))
 
 
+def send_recovery_alert(recovered: list[dict], total: int) -> dict:
+    """Email a recovery notice for sites that transitioned down -> up. Called
+    once per sweep; no-op if alerts are disabled or nothing recovered."""
+    if not recovered:
+        return {"sent": False, "reason": "nothing recovered"}
+    if not alerts_enabled():
+        return {"sent": False, "reason": "alerts disabled (WM_ALERT_TO unset)"}
+
+    names = ", ".join(d.get("name", d["url"]) for d in recovered)
+    subject = f"[website-monitor] {len(recovered)} site(s) RECOVERED: {names}"
+
+    lines = [
+        f"{len(recovered)} site(s) are back UP as of "
+        f"{datetime.now(timezone.utc).isoformat(timespec='seconds')}.",
+        "",
+    ]
+    for d in recovered:
+        code = d.get("status_code") if d.get("status_code") is not None else "-"
+        lat = f"{d['latency_ms']}ms" if d.get("latency_ms") is not None else "-"
+        cat = d.get("category", "?")
+        lines.append(f"  ✓ {d.get('name', d['url'])}  [{cat}]")
+        lines.append(f"      {d['url']}")
+        lines.append(f"      HTTP {code} · {lat}")
+        lines.append(f"      checked: {d.get('checked_at', '?')}")
+        lines.append("")
+    lines.append("-- website-monitor (10.x host) · hourly check")
+    return _deliver(subject, "\n".join(lines))
+
+
 def send_test() -> dict:
     return _deliver(
         "[website-monitor] test alert",
