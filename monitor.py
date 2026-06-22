@@ -13,6 +13,11 @@ import sys
 
 import monitor_core as mc
 
+try:
+    import alerts
+except Exception:  # alerts are optional; never let an import error stop checks
+    alerts = None
+
 
 def main() -> int:
     results = mc.run_all()
@@ -30,6 +35,22 @@ def main() -> int:
         f"[{mc.now_iso()}] checked {len(results)} site(s), "
         f"{len(down)} down"
     )
+
+    # Email alert for any currently-down sites (policy: every hour while down).
+    # Wrapped so a mail failure can never break the monitoring sweep.
+    if down and alerts is not None:
+        try:
+            res = alerts.send_down_alert(down, len(results))
+            if res.get("sent"):
+                vias = ", ".join(
+                    f"{r['domain']}→{r['via']}" for r in res.get("results", []) if r.get("sent")
+                )
+                print(f"[{mc.now_iso()}] alert emailed ({vias})")
+            elif alerts.alerts_enabled():
+                print(f"[{mc.now_iso()}] alert NOT sent: {res}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[{mc.now_iso()}] alert error: {e!r}")
+
     return 0
 
 

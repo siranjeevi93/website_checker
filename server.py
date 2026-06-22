@@ -21,6 +21,11 @@ from mcp.server.fastmcp import FastMCP
 
 import monitor_core as mc
 
+try:
+    import alerts
+except Exception:
+    alerts = None
+
 mcp = FastMCP("website-monitor")
 
 
@@ -86,6 +91,17 @@ def uptime(url: str | None = None) -> dict:
     if url is not None:
         url = mc._normalize_url(url)
     return mc.uptime_summary(url=url)
+
+
+@mcp.tool()
+def test_alert() -> dict:
+    """Send a test alert email to the configured recipients (WM_ALERT_TO).
+    Returns the per-recipient delivery result, or a disabled/unavailable note."""
+    if alerts is None:
+        return {"sent": False, "reason": "alerts module unavailable"}
+    if not alerts.alerts_enabled():
+        return {"sent": False, "reason": "alerts disabled (WM_ALERT_TO unset)"}
+    return alerts.send_test()
 
 
 if __name__ == "__main__":

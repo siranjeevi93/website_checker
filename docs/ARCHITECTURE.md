@@ -20,6 +20,7 @@ flowchart TB
         DASH["<b>dashboard.py</b><br/>Flask UI · :8090"]
         MON["<b>monitor.py</b><br/>hourly sweep"]
         CORE["<b>monitor_core.py</b><br/>check logic + store API"]
+        ALERT["<b>alerts.py</b><br/>direct-to-MX email"]
 
         subgraph store["JSON store"]
             direction LR
@@ -45,6 +46,9 @@ flowchart TB
     CORE -->|write| S2
     CORE -->|append| S3
     DASH -.read.-> S2
+
+    MON -->|down sites| ALERT
+    ALERT -->|SMTP :25 + STARTTLS| MAIL["Recipient MX<br/>(direct, no relay)"]
 ```
 
 | Component | Role | Reads | Writes |
@@ -53,6 +57,7 @@ flowchart TB
 | `server.py` | MCP server (stdio). Manage sites + expose results as tools. | store | `sites.json` |
 | `monitor.py` | Run by cron every hour. Performs a full sweep. | `sites.json` | `status.json`, `history.jsonl` |
 | `dashboard.py` | Flask web UI on `:8090`. Two panes (Internal / External). | store | (only via "Check now") |
+| `alerts.py` | Emails down-alerts directly to the recipient's MX (SMTP :25 + STARTTLS). Opt-in via `WM_ALERT_TO`. | `alert.env` | — |
 | `start-dashboard.sh` | Idempotent launcher used by `@reboot` + watchdog cron. | — | — |
 
 ## The health check

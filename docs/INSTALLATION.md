@@ -111,6 +111,36 @@ Open **http://<host>:8090/** in a browser.
 
 ---
 
+## 5b. Email alerts (optional)
+
+The hourly sweep can email an alert listing any down sites. Mail is delivered
+**directly to each recipient domain's MX** (SMTP :25 + opportunistic STARTTLS) —
+no Postfix/sendmail and no SMTP relay required.
+
+```bash
+cp alert.env.example alert.env
+chmod 600 alert.env
+# edit alert.env: set WM_ALERT_TO=you@example.com (comma-separate for several)
+./venv/bin/python alerts.py --test          # send yourself a test email
+```
+
+`alert.env` is git-ignored and read automatically by `monitor.py` on each run —
+no cron change needed. Alerts stay disabled while `WM_ALERT_TO` is empty.
+
+**If your MX rejects the mail** (common for Gmail/Outlook from un-allowlisted
+hosts — they require SPF/PTR), point at an internal relay that accepts your
+host instead:
+
+```bash
+echo "WM_SMTP_HOST=smtp.internal.example.com" >> alert.env
+```
+
+Verify outbound port 25 to your MX is open before relying on alerts:
+
+```bash
+timeout 5 bash -c 'cat < /dev/null > /dev/tcp/<your-mx-host>/25' && echo open || echo blocked
+```
+
 ## 6. Coexisting with other services on the same host
 
 If the host already runs other apps (including other Flask "webapp" processes):

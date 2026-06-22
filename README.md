@@ -20,6 +20,7 @@ It has no database and no external services — state is plain JSON files on dis
 | **Two categories** | Each site is `internal` or `external`; the dashboard shows them in separate panes. |
 | **Health rule** | A site is healthy when it returns HTTP `< 400` within the timeout (default 10s). Timeouts, connection errors, and 4xx/5xx are unhealthy. |
 | **History & uptime** | Every check is appended to `history.jsonl` (auto-trimmed); uptime % is computed on demand. |
+| **Email alerts** | Optional down-alerts sent **directly to the recipient's MX** (SMTP :25 + opportunistic STARTTLS) — no local mail server or SMTP relay needed. |
 | **Self-contained** | Pure-Python, JSON-on-disk state, one `venv`. No DB, no message broker. |
 | **Safe by default** | Runtime state and any `.env` files are git-ignored; the repo ships no secrets or internal hostnames. |
 
@@ -40,6 +41,7 @@ flowchart LR
         CRON["cron<br/><i>0 * * * *</i>"]
         MON["monitor.py<br/><i>hourly sweep</i>"]
         CORE["monitor_core.py<br/><i>check logic + store</i>"]
+        ALERT["alerts.py<br/><i>direct-to-MX email</i>"]
 
         subgraph store["JSON store (on disk)"]
             S1["sites.json"]
@@ -57,6 +59,8 @@ flowchart LR
     SRV --> CORE
     DASH -- "read-only" --> CORE
     MON --> CORE
+    MON -- "on down sites" --> ALERT
+    ALERT -- "SMTP :25 → MX" --> MAIL["Recipient mail server"]
 
     CORE -- "HTTP GET" --> TARGETS
     CORE <--> store
@@ -113,6 +117,7 @@ For production install (cron schedule + boot persistence), see **[docs/INSTALLAT
 | `status(url=None)` | Latest result per site. |
 | `history(url=None, limit=50)` | Recent check history. |
 | `uptime(url=None)` | Uptime % over recorded history. |
+| `test_alert()` | Send a test alert email to the configured recipients. |
 
 ### Register with an MCP client
 
@@ -131,9 +136,35 @@ To run the server on a remote host over SSH, point `command` at `ssh` and pass t
 
 ---
 
+## Email alerts (optional)
+
+When the hourly sweep finds one or more sites down, it can email a consolidated
+alert. Delivery is **direct to each recipient domain's MX** over SMTP port 25
+with opportunistic STARTTLS — so **no local mail server (Postfix/sendmail) and
+no SMTP relay are required**. It works wherever outbound `:25` to the
+recipient's MX is allowed and that MX accepts your host's mail.
+
+Enable it by creating a git-ignored `alert.env` (copy from `alert.env.example`):
+
+```bash
+cp alert.env.example alert.env
+# edit: WM_ALERT_TO=you@example.com
+./venv/bin/python alerts.py --test     # send yourself a test
+```
+
+Alerts are **disabled** whenever `WM_ALERT_TO` is empty (the default), so the
+feature is opt-in and the repo carries no addresses.
+
+> **Deliverability note.** Many public providers (Gmail, Outlook/365, etc.)
+> reject mail from arbitrary hosts lacking SPF/PTR. Direct-to-MX is most
+> reliable when sending *within your own org's domain* or to a server that
+> allowlists your egress IP. If your MX rejects it, set `WM_SMTP_HOST` to an
+> internal relay/smarthost that accepts your host.
+
 ## Configuration
 
-All settings are environment variables (sensible defaults shown):
+All settings are environment variables (sensible defaults shown). Alert vars are
+typically placed in `alert.env`; the rest can go in the cron/launch environment.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -142,6 +173,10 @@ All settings are environment variables (sensible defaults shown):
 | `WM_WEB_PORT` | `8090` | Dashboard port. |
 | `WM_MONITOR_LABEL` | `Hourly availability monitoring` | Sub-title shown on the dashboard. |
 | `WM_SITES` / `WM_STATUS` / `WM_HISTORY` | `./sites.json` etc. | Override store file locations. |
+| `WM_ALERT_TO` | *(empty → disabled)* | Comma-separated alert recipients. |
+| `WM_ALERT_FROM` | `website-monitor@<fqdn>` | Envelope/From address. |
+| `WM_SMTP_HOST` | *(MX lookup)* | Force a smarthost/relay instead of direct MX. |
+| `WM_SMTP_TIMEOUT` | `30` | SMTP connection timeout (seconds). |
 
 ---
 
@@ -153,10 +188,12 @@ website_checker/
 ├── monitor.py           # hourly checker (run by cron)
 ├── monitor_core.py      # shared check logic + JSON store
 ├── dashboard.py         # Flask dashboard (:8090)
+├── alerts.py            # direct-to-MX email alerts (no relay needed)
 ├── start-dashboard.sh   # boot/watchdog launcher for the dashboard
 ├── smoke_test.py        # self-contained test (isolated temp store)
 ├── requirements.txt
 ├── sites.example.json   # sample site list (copy to sites.json or use add_site)
+├── alert.env.example    # sample alert config (copy to alert.env, git-ignored)
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   └── INSTALLATION.md
