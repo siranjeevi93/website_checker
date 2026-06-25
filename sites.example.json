@@ -10,6 +10,7 @@
     "url": "https://wiki.internal.example.com",
     "category": "internal",
     "verify_tls": false,
+    "resolve_ip": "10.0.0.10",
     "added": "2026-01-01T00:00:00+00:00"
   }
 ]

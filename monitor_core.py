@@ -22,6 +22,8 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from urllib.parse import urlsplit, urlunsplit
+
 import requests
 import urllib3
 
@@ -94,21 +96,23 @@ def _normalize_category(category: str | None) -> str:
 
 
 def add_site(url: str, name: str | None = None, category: str | None = None,
-             verify_tls: bool = True) -> dict:
+             verify_tls: bool = True, resolve_ip: str | None = None) -> dict:
     url = _normalize_url(url)
     cat = _normalize_category(category)
     sites = load_sites()
     for s in sites:
         if s["url"] == url:
-            # idempotent on url; allow updating name/category/verify in place
+            # idempotent on url; allow updating fields in place
             if name:
                 s["name"] = name
             s["category"] = cat
             s["verify_tls"] = verify_tls
+            s["resolve_ip"] = resolve_ip
             save_sites(sites)
             return s
     entry = {"name": name or url, "url": url, "category": cat,
-             "verify_tls": verify_tls, "added": now_iso()}
+             "verify_tls": verify_tls, "resolve_ip": resolve_ip,
+             "added": now_iso()}
     sites.append(entry)
     save_sites(sites)
     return entry
@@ -131,19 +135,33 @@ def remove_site(url_or_name: str) -> bool:
 # ---- the check --------------------------------------------------------------
 
 def check_url(url: str, timeout: float = DEFAULT_TIMEOUT,
-              verify_tls: bool = True) -> dict:
+              verify_tls: bool = True, resolve_ip: str | None = None) -> dict:
     """Perform one HTTP GET and return a structured result dict.
 
     Set verify_tls=False for internal hosts with self-signed/private-CA certs
     (e.g. vCenter, appliances on .local) so a cert-trust failure does not show
-    as a false DOWN. The HTTP status check is unchanged."""
+    as a false DOWN. The HTTP status check is unchanged.
+
+    Set resolve_ip to connect to a fixed IP while still sending the original
+    hostname as the Host header — for internal hosts that have no DNS record on
+    the monitor (a no-sudo alternative to editing /etc/hosts). The recorded
+    `url` stays the original."""
     started = now_iso()
     headers = {"User-Agent": USER_AGENT}
+    request_url = url
+    if resolve_ip:
+        parts = urlsplit(url)
+        headers["Host"] = parts.netloc  # original host[:port]
+        port = f":{parts.port}" if parts.port else ""
+        request_url = urlunsplit(
+            (parts.scheme, f"{resolve_ip}{port}", parts.path,
+             parts.query, parts.fragment)
+        )
     if not verify_tls:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     try:
         resp = requests.get(
-            url, timeout=timeout, headers=headers, allow_redirects=True,
+            request_url, timeout=timeout, headers=headers, allow_redirects=True,
             verify=verify_tls,
         )
         latency_ms = round(resp.elapsed.total_seconds() * 1000, 1)
@@ -251,7 +269,8 @@ def run_all(timeout: float = DEFAULT_TIMEOUT) -> list[dict]:
     results = []
     for site in load_sites():
         res = check_url(site["url"], timeout=timeout,
-                        verify_tls=site.get("verify_tls", True))
+                        verify_tls=site.get("verify_tls", True),
+                        resolve_ip=site.get("resolve_ip"))
         res["name"] = site.get("name", site["url"])
         res["category"] = site.get("category", "external")
         record_result(res)

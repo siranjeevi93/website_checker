@@ -20,6 +20,7 @@ It has no database and no external services — state is plain JSON files on dis
 | **Two categories** | Each site is `internal` or `external`; the dashboard shows them in separate panes. |
 | **Health rule** | A site is healthy when it returns HTTP `< 400` within the timeout (default 10s). Timeouts, connection errors, and 4xx/5xx are unhealthy. |
 | **Self-signed TLS** | Per-site `verify_tls=False` for internal hosts with private-CA/self-signed certs, so cert-trust failures aren't false DOWNs. |
+| **No-DNS hosts** | Per-site `resolve_ip` connects to a fixed IP while sending the real hostname as `Host` — monitor hosts with no DNS record without touching `/etc/hosts`. |
 | **History & uptime** | Every check is appended to `history.jsonl` (auto-trimmed); uptime % is computed on demand. |
 | **Email alerts** | Optional down-alerts sent **directly to the recipient's MX** (SMTP :25 + opportunistic STARTTLS) — no local mail server or SMTP relay needed. |
 | **Self-contained** | Pure-Python, JSON-on-disk state, one `venv`. No DB, no message broker. |
@@ -111,7 +112,7 @@ For production install (cron schedule + boot persistence), see **[docs/INSTALLAT
 
 | Tool | Description |
 |------|-------------|
-| `add_site(url, name=None, category="external", verify_tls=True)` | Add/update a site. `category` is `internal` or `external`. Set `verify_tls=False` for self-signed/private-CA hosts (e.g. vCenter, `.local` appliances). Idempotent on URL. |
+| `add_site(url, name=None, category="external", verify_tls=True, resolve_ip=None)` | Add/update a site. `category` is `internal` or `external`. Set `verify_tls=False` for self-signed/private-CA hosts (vCenter, `.local` appliances). Set `resolve_ip` to monitor a host that has no DNS record on the monitor (connects to that IP, sends the real hostname as `Host`). Idempotent on URL. |
 | `remove_site(url_or_name)` | Stop monitoring a site. |
 | `list_sites()` | List configured sites. |
 | `check_now(url=None)` | Run an immediate check (one URL, or all configured). |
